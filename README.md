@@ -17,8 +17,8 @@ Directory structure looks something like this:
 
 ## Init repo:  
     gitpad = require('gitpad')  
-    gitpad.init('path to dir containing root .git') // if argument ommited will use current directory  
-    gitpad.status()                                 // check if init successful, look for output in console  
+    gitpad.init('path to dir containing root .git') // if argument ommited will use current directory, 
+                                                    // look for console output to check success
   
 For available file control ops read gitpad.js.  
   
