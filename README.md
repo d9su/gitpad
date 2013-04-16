@@ -1,4 +1,4 @@
-# gitpad v0.1
+# gitpad v0.2
 
 Allows git ops for saasy cms. 
 
@@ -23,6 +23,11 @@ Directory structure looks something like this:
 For available file control ops read gitpad.js.  
   
 ## TODO:  
-1. Error handling  
+~~1. Error handling  ~~
 2. More robust init process  
 3. Compress cherry-picked commits into one "publish" commit  
+
+
+## Update:
+v0.2 - modified the functions to accept callback, leaving error handling implementation to user  
+v0.1 - initial alpha version  
