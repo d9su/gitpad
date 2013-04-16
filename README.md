@@ -1,4 +1,4 @@
-# gitpad v0.2
+# gitpad v0.2.1
 
 Allows git ops for saasy cms. 
 
@@ -29,5 +29,6 @@ For available file control ops read gitpad.js.
 
 
 ## Update:
-v0.2 - modified the functions to accept callback, leaving error handling implementation to user  
-v0.1 - initial alpha version  
+v0.2.1  - fixed the publishFiles function to group cherry-picked commits to a single publish commit utilizing temp branches
+v0.2    - modified the functions to accept callback, leaving error handling implementation to user  
+v0.1    - initial alpha version  
