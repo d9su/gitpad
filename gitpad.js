@@ -5,6 +5,25 @@
   var _repo = null;
 
   /*
+    Utilities
+  */
+  // Get todays date
+  Date.prototype.today = function(){ 
+      return this.getFullYear() + "-" + (((this.getMonth()+1) < 10)?"0":"") + (this.getMonth()+1) + "-" + ((this.getDate() < 10)?"0":"") + this.getDate();
+  };
+
+  // Get current time
+  Date.prototype.time = function(){
+       return ((this.getHours() < 10)?"0":"") + this.getHours() +"-"+ ((this.getMinutes() < 10)?"0":"") + this.getMinutes() +"-"+ ((this.getSeconds() < 10)?"0":"") + this.getSeconds();
+  };
+
+  // Get date and time, joining with '@'
+  var now = function() {
+    var date = new Date();
+    return date.today() + '/' + date.time();
+  }
+
+  /*
     Initialize git repository
     - path(otional): path to your git repo, relative to where the script is called (ex, docpad root). Default to '.'
     - callback: receives (err, status)
@@ -131,10 +150,12 @@
     Publish selected file(s) (pushes selective file(s) from local repo to remote repo)
     - files: list of names of the files to be published
     - callback: receives (err), be aware that this will possibly be called multiple times, once for every file
+    - NOTE: So many steps! So many things could go wrong! How should we remedy from them?
   */
-  exports.publishFiles = function(files, callback) {
+  exports.publishFiles = function(files, msg, callback) {
     var fileCommits = [];
     // Get all the commit ids needing to be cherry-picked
+    var fileCount = files.length;
     for (var i=0; i<files.length; i++) {
       _repo.file_history(files[i], 1, function(err, commits) {
         if (err) {
@@ -143,30 +164,63 @@
         }
 
         fileCommits.push(commits[0].id);
+
+        if (!--fileCount) {
+          // Complete flow:
+          // 1. Create (and automatically switch to) temp branch based on staging branch for this publish
+          var temp_branch = "Publish-"+now();
+          _repo.duplicate_branch(temp_branch, "staging", function(err) {
+            if (err) {
+              callback(err);
+              return;
+            }
+
+            // 2. Cherry-pick all the commits into temp branch
+            var cherryCount = fileCommits.length;
+            for (var i=0; i<fileCommits.length; i++) {
+              _repo.cherrypick(fileCommits[i], {"strategy": "recursive", "strategy-option": "theirs"}, function(err){
+                if (err) {
+                  callback(err);
+                  return;
+                }
+
+                // 3. Switch to staging branch
+                if (!--cherryCount) {
+                  _repo.checkout("staging", function(err) {
+                    if (err) {  // TODO: if error occurs here, user will not be able to switch back to original branch!!
+                      callback(err);
+                      return;
+                    }
+
+                    // 4. Use "merge --squash" to grab all the commits from temp into staging
+                    _repo.merge(temp_branch, {squash: true}, "This comment will be ignored by git", function(err) {
+                      if (err) {
+                        callback(err);
+                        return;
+                      }
+
+                      // 5. Commit changes squashed from temp branch
+                      _repo.commit("Publish <DATE>\n" + msg, {a: true}, function(err) {
+                        if (err) {
+                          callback(err);
+                        }
+                        // 6. Delete temp branch
+                        // Maybe we wanna keep it??
+
+                        // 7. Switch back to original branch
+                        _repo.checkout("master", callback);
+                      });
+                    });
+                  });
+                }
+              });
+            }
+          });
+        }
+
+
       });
     }
-
-    // Switch to staging branch -> cherry pick all the commits -> switch back to dev branch
-    _repo.checkout("staging", function(err) {
-      if (err) {
-        callback(err);
-        return;
-      }
-
-      var loopcount = fileCommits.length;
-      for (var i=0; i<fileCommits.length; i++) {
-        _repo.cherrypick(fileCommits[i], {"strategy": "recursive", "strategy-option": "theirs"}, function(err){
-          if (err) {
-            callback(err);
-          }
-
-          if (!loopcount--) {
-            _repo.checkout("master", callback);
-          }
-        });
-      }
-    });
-
   }
 
   /*
