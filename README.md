@@ -1,4 +1,4 @@
-gitpad v0.1
+# gitpad v0.1
 
 Allows git ops for saasy cms. 
 
@@ -13,15 +13,16 @@ Directory structure looks something like this:
   - plugins (dp plugins)  
   - src  
 
-Usage:  
-Init repo:  
-  gitpad = require('gitpad')  
-  gitpad.init('path to dir containing root .git') // if argument ommited will use current directory  
-  gitpad.status()                                 // check if init successful, look for output in console  
+# Usage:  
+
+## Init repo:  
+    gitpad = require('gitpad')  
+    gitpad.init('path to dir containing root .git') // if argument ommited will use current directory, 
+                                                    // look for console output to check success
   
 For available file control ops read gitpad.js.  
   
-TODO:  
+## TODO:  
 1. Error handling  
 2. More robust init process  
 3. Compress cherry-picked commits into one "publish" commit  
