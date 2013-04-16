@@ -17,13 +17,13 @@ Directory structure looks something like this:
 
 ## Init repo:  
     gitpad = require('gitpad')  
-    gitpad.init('path to dir containing root .git') // if argument ommited will use current directory, 
-                                                    // look for console output to check success
+    gitpad.init('path/to/repo', callback) // if path ommited will use ".", callback receives (err, status)
+                                          // look for console output to check success
   
 For available file control ops read gitpad.js.  
   
 ## TODO:  
-~~1. Error handling  ~~
+~~1. Error handling~~  
 2. More robust init process  
 3. Compress cherry-picked commits into one "publish" commit  
 
