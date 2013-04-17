@@ -21,7 +21,18 @@
   var now = function() {
     var date = new Date();
     return date.today() + '/' + date.time();
-  }
+  };
+
+  // Attempt to go back to master branch and panic out if error occurs
+  var resume = function(callback) {
+    _repo.checkout("master", function(err) {
+      if (err) {
+        throw new Error("Fatal: Unable to resume original resource branch! Error:" + err);
+      }
+
+      callback();
+    });
+  };
 
   /*
     Initialize git repository
@@ -48,16 +59,22 @@
       }
 
       callback(err, status);
-    })
+    });
   };
+
+
+  /*
+    Attempt remedy from errors
+  */
+  
 
 
   //
   //===== Show repo status (clean? tracked/untracked files?)
   //
   exports.showStatus = function(callback) {
-    _repo.status(callback(err, status));
-  }
+    _repo.status(callback);
+  };
 
 
   //
@@ -77,11 +94,10 @@
     - filename: name of the file being queried
     - limit(optional): an integer indicating how many commits to be shown, put "all" if want to see all commits (default 10)
     - callback: receives (err, commits)
-    TODO: add callback
   */
   exports.showFileHistory = function(filename, limit, callback) {
-    _repo.file_history(filename, limit, callback(err, commits));
-  }
+    _repo.file_history(filename, limit, callback);
+  };
 
   /*
     Lists most recent commits applied to the whole repo (branch is default to "master")
@@ -90,8 +106,8 @@
     - callback: receives (err, commits)
   */
   exports.showHistory = function(limit, skip, callback) {
-    _repo.commits("master", limit, skip, callback(err, commits));
-  }
+    _repo.commits("master", limit, skip, callback);
+  };
 
   /*
     Add the file to be saved into current commit and commit the file
@@ -108,7 +124,7 @@
 
       _repo.commit('Saved file "' + filename + '": ' + msg, {}, callback);
     });
-  }
+  };
 
   /*
     Remove a file from file system, then commit the removal
@@ -126,7 +142,7 @@
 
       _repo.commit('Removed file "' + filename + '": ' + msg, {}, callback);
     });
-  }
+  };
 
   /*
     Revert a file back to a previous commited state, and then commit the revert
@@ -144,87 +160,132 @@
 
       exports.saveFile(filename, 'Reverted file "' + filename + '" to previous version from snapshot ID ' + commitID + ': ' + msg, callback);
     });
-  }
+  };
 
   /*
     Publish selected file(s) (pushes selective file(s) from local repo to remote repo)
     - files: list of names of the files to be published
     - callback: receives (err), be aware that this will possibly be called multiple times, once for every file
-    - NOTE: So many steps! So many things could go wrong! How should we remedy from them?
+    - NOTE: So many steps! So many things could go wrong! How should we remedy from them? 
+    - At each step where error happens, try to remedy by rolling back the changes.
   */
   exports.publishFiles = function(files, msg, callback) {
     var fileCommits = [];
     // Get all the commit ids needing to be cherry-picked
     var fileCount = files.length;
-    for (var i=0; i<files.length; i++) {
-      _repo.file_history(files[i], 1, function(err, commits) {
-        if (err) {
-          callback(err);
-          return;
-        }
 
-        fileCommits.push(commits[0].id);
+    // Define the callback function here instead of using anonymous functions in the actual loop
+    var fetchHistoryCallback = function(err, commits) {
+      if (err) {
+        callback(err);
+        return;
+      }
 
-        if (!--fileCount) {
-          // Complete flow:
-          // 1. Create (and automatically switch to) temp branch based on staging branch for this publish
-          var temp_branch = "Publish-"+now();
-          _repo.duplicate_branch(temp_branch, "staging", function(err) {
+      fileCommits.push(commits[0].id);
+
+      if (!--fileCount) {
+        // Complete flow:
+        // Step 1. Create (and automatically switch to) temp branch based on staging branch for this publish
+        // var temp_branch = "Publish-"+now();
+        var temp_branch = "temp";
+        _repo.duplicate_branch(temp_branch, "staging", function(err) {
+          if (err) {
+            callback(err);
+            // Error: failed to create temp branch, attemp to resume back to master
+            resume();
+            return;
+          }
+
+          // Step 2. Cherry-pick all the commits into temp branch
+          var cherryCount = fileCommits.length;
+          var cherrypickCallback = function(err) {
             if (err) {
               callback(err);
+              // Error: failed to cherry-pick commits, attemp to go back to master and delete temp branch
+              resume(function() {
+                _repo.delete_branch(temp_branch, true, function(err) {
+                  if (err) throw new Error("Attempt to remedy has failed! Unable to delete temporary branch! " + err);
+                });
+              });
+
               return;
             }
 
-            // 2. Cherry-pick all the commits into temp branch
-            var cherryCount = fileCommits.length;
-            for (var i=0; i<fileCommits.length; i++) {
-              _repo.cherrypick(fileCommits[i], {"strategy": "recursive", "strategy-option": "theirs"}, function(err){
+            // Step 3. Switch to staging branch
+            if (!--cherryCount) {
+              _repo.checkout("staging", function(err) {
                 if (err) {
                   callback(err);
+                  // Error: failed to switch to staging, attempt to go back to master and delete temp branch
+                  resume(function() {
+                    _repo.delete_branch(temp_branch, function(err) {
+                      if (err) throw new Error("Attempt to remedy has failed! Unable to delete temporary branch! " + err);
+                    });
+                  });
                   return;
                 }
 
-                // 3. Switch to staging branch
-                if (!--cherryCount) {
-                  _repo.checkout("staging", function(err) {
-                    if (err) {  // TODO: if error occurs here, user will not be able to switch back to original branch!!
-                      callback(err);
-                      return;
-                    }
+                // Step 4. Use "merge --squash" to grab all the commits from temp into staging
+                _repo.merge(temp_branch, {squash: true}, "This comment will be ignored by git", function(err) {
+                  if (err) {
+                    callback(err);
+                    // Error: failed to squash merge commits from temp to staging, attempt to reset any possible partial changes 
+                    //  on staging, go back to master and delete temp branch
+                    _repo.resetHEAD(0, true, function(err) {
+                      if (err) throw new Error("Attempt to remedy has failed! Unable to clean up staging branch! " + err);
 
-                    // 4. Use "merge --squash" to grab all the commits from temp into staging
-                    _repo.merge(temp_branch, {squash: true}, "This comment will be ignored by git", function(err) {
-                      if (err) {
-                        callback(err);
-                        return;
-                      }
-
-                      // 5. Commit changes squashed from temp branch
-                      _repo.commit("Publish <DATE>\n" + msg, {a: true}, function(err) {
-                        if (err) {
-                          callback(err);
-                        }
-                        // 6. Delete temp branch
-                        // Maybe we wanna keep it??
-
-                        // 7. Switch back to original branch
-                        _repo.checkout("master", callback);
+                      resume(function() {
+                        _repo.delete_branch(temp_branch, true, function(err) {
+                          if (err) throw new Error("Attempt to remedy has failed! Unable to delete temporary branch! " + err);
+                        });
                       });
                     });
+                    return;
+                  }
+
+                  // Step 5. Commit changes squashed from temp branch
+                  _repo.commit("Publish <DATE>\n" + msg, {a: true}, function(err) {
+                    if (err) {
+                      callback(err);
+                      // Error: failed to commit changes, attempt to reset any outstanding changes on staging, go back to master
+                      //  and delete temp branch
+                      _repo.resetHEAD(0, true, function(err) {
+                        if (err) throw new Error("Attempt to remedy has failed! Unable to clean up staging branch! " + err);
+
+                        resume(function() {
+                          _repo.delete_branch(temp_branch, true, function(err) {
+                            if (err) throw new Error("Attempt to remedy has failed! Unable to delete temporary branch! " + err);
+                          });
+                        });
+                      });
+                      return;
+                    }
+                    // Step 6. Delete temp branch
+                    // Maybe we wanna keep it??
+
+                    // Step 7. Switch back to master branch
+                    resume(callback);
                   });
-                }
+                });
               });
             }
-          });
-        }
+          };
 
+          for (var i=0; i<fileCommits.length; i++) {
+            _repo.cherrypick(fileCommits[i], {"strategy": "recursive", "strategy-option": "theirs"}, cherrypickCallback);
+          }
+        });
+      }
+    };
 
-      });
+    // Actual loop of where the fetch histroy happens
+    for (var i=0; i<files.length; i++) {
+      _repo.file_history(files[i], 1, fetchHistoryCallback);
     }
-  }
+  };
 
   /*
-    Publish everything!! -- Switch to staging branch -> merge with master branch -> switch back to master
+    Publish everything!! -- Switch to staging branch -> merge squash with master branch -> commit -> switch back to master
     - msg: a message associated with the publish
     - callback: receives (err)
   */
@@ -232,18 +293,38 @@
     _repo.checkout("staging", function(err) {
       if (err) {
         callback(err);
+        // Error: failed to checkout staging branch, stay on master
+        resume();
         return;
       }
 
-      _repo.merge("master", {"no-ff": true}, "Publish <DATE>\n" + msg, function(err) {
+      _repo.merge("master", {"squash": true}, "This comment will be ignored by git", function(err) {
         if (err) {
           callback(err);
+          // Error: failed to squash commit, reset any possible partial changes and switch back to master
+          _repo.resetHEAD(0, true, function(err) {
+            if (err) throw new Error("Attempt to remedy has failed! Unable to clean up staging branch! " + err);
+            resume();
+          });
+          return;
         }
 
-        _repo.checkout("master", callback);
-      })
+        _repo.commit("Publish <DATE>\n" + msg, {a: true}, function(err) {
+          if (err) {
+            callback(err);
+            // Error: failed to squash commit, reset any possible partial changes and switch back to master
+            _repo.resetHEAD(0, true, function(err) {
+              if (err) throw new Error("Attempt to remedy has failed! Unable to clean up staging branch! " + err);
+              resume();
+            });
+            return;
+          }
+
+          resume(callback);
+        })
+      });
     });
-  }
+  };
 
 
 }).call(this);
