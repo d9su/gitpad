@@ -27,6 +27,7 @@ For available file control ops read gitpad.js.
 ~~2. More robust init process~~  
 ~~3. Compress cherry-picked commits into one "publish" commit~~  
 ~~4. More robust error remedy policy~~  
+5. Add capability to publish staging branch to a remote repository  
 
 
 ## Update:
