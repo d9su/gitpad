@@ -186,8 +186,7 @@
       if (!--fileCount) {
         // Complete flow:
         // Step 1. Create (and automatically switch to) temp branch based on staging branch for this publish
-        // var temp_branch = "Publish-"+now();
-        var temp_branch = "temp";
+        var temp_branch = "Publish-"+now();
         _repo.duplicate_branch(temp_branch, "staging", function(err) {
           if (err) {
             callback(err);
