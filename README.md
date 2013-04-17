@@ -26,7 +26,7 @@ For available file control ops read gitpad.js.
 ~~1. Error handling~~  
 ~~2. More robust init process~~  
 ~~3. Compress cherry-picked commits into one "publish" commit~~  
-4. More robust error remedy policy  
+~~4. More robust error remedy policy~~  
 
 
 ## Update:
