@@ -54,7 +54,7 @@
         console.log("Git repo initialization successful!");
       }
 
-      if (callback === undefined)
+      if (callback)
         callback(err, status);
     });
   };
