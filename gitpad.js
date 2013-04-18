@@ -36,16 +36,12 @@
 
   /*
     Initialize git repository
-    - path(otional): path to your git repo, relative to where the script is called (ex, docpad root). Default to '.'
-    - callback: receives (err, status)
+    - path: path to your git repo, relative to where the script is called (ex, docpad root).
+    - callback(optional): receives (err, status). Be ware: if you don't use a callback, make sure the init happens before
+    -   all other git operations
   */
   exports.init = function(path, callback) {
-    var _ref2;
-    if (!callback) {
-      _ref2 = [path, callback], callback = _ref2[0], path = _ref2[1];
-    }
-    if (!callback) throw new Error("a callback is required");
-    if (!path) path = ".";
+    if (!path) throw new Error("must specify a path for git repo");
 
     _repo = _git(path);
     _repo.status(function(err, status) {
@@ -58,7 +54,8 @@
         console.log("Git repo initialization successful!");
       }
 
-      callback(err, status);
+      if (callback === undefined)
+        callback(err, status);
     });
   };
 
@@ -190,7 +187,7 @@
         _repo.duplicate_branch(temp_branch, "staging", function(err) {
           if (err) {
             callback(err);
-            // Error: failed to create temp branch, attemp to resume back to master
+            // Error: failed to create temp branch, attempt to resume back to master
             resume();
             return;
           }
@@ -200,7 +197,7 @@
           var cherrypickCallback = function(err) {
             if (err) {
               callback(err);
-              // Error: failed to cherry-pick commits, attemp to go back to master and delete temp branch
+              // Error: failed to cherry-pick commits, attempt to go back to master and delete temp branch
               resume(function() {
                 _repo.delete_branch(temp_branch, true, function(err) {
                   if (err) throw new Error("Attempt to remedy has failed! Unable to delete temporary branch! " + err);
@@ -324,6 +321,5 @@
       });
     });
   };
-
 
 }).call(this);
